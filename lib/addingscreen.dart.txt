@@ -1,0 +1,111 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
+import 'package:device_info/device_info.dart';
+
+void main() => runApp(MyApp());
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatefulWidget {
+  @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  String deviceName = 'Loading...';
+
+  @override
+  void initState() {
+    super.initState();
+    getDeviceName();
+  }
+
+  Future<void> getDeviceName() async {
+    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+    setState(() {
+      deviceName = androidInfo.model;
+    });
+  }
+
+Future<void> sendDeviceInfo() async {
+  try {
+    final apiUrl = 'http://192.168.0.34/attendance_monitoring%20system/api.php';
+    final headers = {'Content-Type': 'application/json'};
+    final body = jsonEncode({'device_name': deviceName});
+
+    final response = await http
+        .post(Uri.parse(apiUrl), headers: headers, body: body)
+        .timeout(Duration(seconds: 10)); // Set the timeout duration in seconds
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data.containsKey('error')) {
+        _showAlertDialog('Error', data['error']);
+      } else if (data.containsKey('Success')) {
+        _showAlertDialog('Success', data['Success']);
+      } else if (data.containsKey('message')) {
+        _showAlertDialog('Message', data['message']);
+      } else {
+        _showAlertDialog(
+            'Unknown Response', 'Unknown response from server: $data');
+      }
+    } else {
+      _showAlertDialog(
+          'Error', 'Error sending device info: ${response.statusCode}');
+    }
+  } catch (e) {
+    if (e is TimeoutException) {
+      _showAlertDialog('Timeout Error', 'Request took too long to respond.');
+    } else {
+      _showAlertDialog(
+          'Error', 'Network error: Unable to connect to the server.');
+    }
+  }
+}
+
+
+  void _showAlertDialog(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Device Info Sender')),
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () {
+            sendDeviceInfo();
+          },
+          child: Text('Send Device Info'),
+        ),
+      ),
+    );
+  }
+}
